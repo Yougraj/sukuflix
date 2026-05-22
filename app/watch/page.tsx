@@ -89,7 +89,7 @@ function WatchContent() {
                   {
                     kind: "captions",
                     label: "English",
-                    srclang: "en",
+                    srcLang: "en",
                     src: activeEp.sub,
                     default: true,
                   },
