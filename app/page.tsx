@@ -1,64 +1,135 @@
-import Image from "next/image";
+"use client";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Search, LogOut, Play } from "lucide-react";
 
-export default function Home() {
+export default function Dashboard() {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!localStorage.getItem("suku_auth")) router.push("/login");
+    const saved = JSON.parse(localStorage.getItem("suku_history") || "[]");
+    setHistory(saved);
+  }, [router]);
+
+  const handleSearch = async (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && query) {
+      setLoading(true);
+      const res = await fetch("/api/scrape", {
+        method: "POST",
+        body: JSON.stringify({ action: "search", query }),
+      });
+      const data = await res.json();
+      setResults(data);
+      setLoading(false);
+    }
+  };
+
+  const openDrama = (item: any) => {
+    const newHistory = [
+      item,
+      ...history.filter((h: any) => h.title !== item.title),
+    ].slice(0, 20);
+    localStorage.setItem("suku_history", JSON.stringify(newHistory));
+    router.push(
+      `/watch?title=${encodeURIComponent(item.title)}&img=${encodeURIComponent(item.image)}`,
+    );
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+    <div className="min-h-screen bg-[#141414] text-white">
+      <nav className="p-6 flex justify-between items-center sticky top-0 bg-[#141414]/90 backdrop-blur-md z-50">
+        <h1 className="text-rose-600 text-3xl font-black italic">SUKU FLIX</h1>
+        <div className="flex gap-4 items-center">
+          <div className="relative group">
+            <Search className="absolute left-3 top-2.5 w-5 h-5 text-gray-500 group-focus-within:text-rose-500" />
+            <input
+              onKeyDown={handleSearch}
+              onChange={(e) => setQuery(e.target.value)}
+              className="bg-black border border-zinc-700 rounded-full py-2 pl-10 pr-4 w-64 focus:w-80 transition-all outline-none"
+              placeholder="Search your favorites..."
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          </div>
+          <button
+            onClick={() => {
+              localStorage.removeItem("suku_auth");
+              router.push("/login");
+            }}
           >
-            Documentation
-          </a>
+            <LogOut className="w-6 h-6 text-gray-400 hover:text-rose-500" />
+          </button>
         </div>
+      </nav>
+
+      <main className="p-8">
+        {/* History Section */}
+        {history.length > 0 && (
+          <section className="mb-12">
+            <h2 className="text-2xl font-bold mb-6 text-rose-100">
+              Continue Watching for Suku
+            </h2>
+            <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+              {history.map((item: any, i) => (
+                <div
+                  key={i}
+                  onClick={() => openDrama(item)}
+                  className="min-w-[280px] cursor-pointer group"
+                >
+                  <div className="relative overflow-hidden rounded-xl h-40">
+                    <img
+                      src={item.image}
+                      className="w-full h-full object-cover group-hover:scale-110 transition duration-500"
+                    />
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                      <Play className="fill-white w-12 h-12" />
+                    </div>
+                  </div>
+                  <p className="mt-3 font-semibold truncate">{item.title}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Results Section */}
+        {results.length > 0 && (
+          <section>
+            <h2 className="text-2xl font-bold mb-6 text-rose-500">
+              Search Results
+            </h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
+              {results.map((item: any, i) => (
+                <div
+                  key={i}
+                  onClick={() => openDrama(item)}
+                  className="cursor-pointer group"
+                >
+                  <div className="relative aspect-[2/3] rounded-xl overflow-hidden shadow-2xl">
+                    <img
+                      src={item.image}
+                      className="w-full h-full object-cover group-hover:scale-110 transition duration-500"
+                    />
+                    <div className="absolute bottom-2 right-2 bg-rose-600 px-2 py-1 rounded text-xs">
+                      {item.ep}
+                    </div>
+                  </div>
+                  <p className="mt-3 font-bold text-sm truncate group-hover:text-rose-500 transition">
+                    {item.title}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+        {loading && (
+          <p className="text-rose-500 animate-pulse text-center mt-20">
+            Searching stories for you, love...
+          </p>
+        )}
       </main>
     </div>
   );
