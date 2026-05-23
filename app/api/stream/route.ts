@@ -1,5 +1,17 @@
 export const runtime = "edge";
 
+// 1. THIS FIXES NETLIFY CORS FOR SUBTITLES
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "*",
+    },
+  });
+}
+
 export async function GET(req: Request) {
   const reqUrl = new URL(req.url);
   const targetUrl = reqUrl.searchParams.get("url");
@@ -7,7 +19,7 @@ export async function GET(req: Request) {
 
   if (!targetUrl) return new Response("No URL provided", { status: 400 });
 
-  // 1. SMART REDIRECT FOR MP4s (Prevents Netlify from timing out on large movies)
+  // Smart Redirect for MP4s (Prevents Netlify Timeouts)
   if (targetUrl.includes(".mp4") && !isSub) {
     return Response.redirect(targetUrl, 302);
   }
@@ -22,7 +34,6 @@ export async function GET(req: Request) {
       },
     });
 
-    // 2. ERROR CATCHER
     if (!res.ok) {
       if (isSub)
         return new Response("WEBVTT\n\n", {
@@ -36,7 +47,7 @@ export async function GET(req: Request) {
 
     let contentType = res.headers.get("content-type") || "";
 
-    // 3. SUBTITLE FORMATTER & CONVERTER
+    // 2. SUBTITLE CONVERTER (Forces all subtitles into WEBVTT format)
     if (
       isSub ||
       contentType.includes("vtt") ||
@@ -45,8 +56,6 @@ export async function GET(req: Request) {
     ) {
       let text = await res.text();
 
-      // Browsers STRICTLY require the file to start with WEBVTT.
-      // If it's an SRT file, we convert it to VTT on the fly so it actually displays!
       if (!text.trim().startsWith("WEBVTT")) {
         text =
           "WEBVTT\n\n" + text.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2");
@@ -61,7 +70,7 @@ export async function GET(req: Request) {
       });
     }
 
-    // 4. M3U8 PLAYLIST REWRITER
+    // 3. M3U8 PLAYLIST REWRITER
     if (contentType.includes("mpegurl") || targetUrl.includes(".m3u8")) {
       const text = await res.text();
       const baseApiUrl = `${reqUrl.origin}/api/stream?url=`;
@@ -95,7 +104,7 @@ export async function GET(req: Request) {
       });
     }
 
-    // 5. STANDARD CHUNKS (.TS)
+    // 4. STANDARD CHUNKS (.TS)
     return new Response(res.body, {
       headers: {
         "Content-Type": contentType || "video/mp2t",

@@ -55,13 +55,12 @@ function WatchContent() {
     load();
   }, [rawTitle]);
 
-  // SMART URL ROUTING
   const isM3U8 = activeEp?.url?.includes(".m3u8");
   const videoUrl = isM3U8
     ? `/api/stream?url=${encodeURIComponent(activeEp?.url || "")}`
     : activeEp?.url;
 
-  // FIXED: No longer requiring .vtt extension in the URL, as long as `sub` exists, we proxy it!
+  // 1. NO STRICT CHECKS - If a sub exists, proxy it!
   const subProxyUrl = activeEp?.sub
     ? `/api/stream?url=${encodeURIComponent(activeEp.sub)}&isSub=true`
     : "";
@@ -110,7 +109,6 @@ function WatchContent() {
       video.addEventListener("play", handlePlay);
       document.addEventListener("fullscreenchange", handleFullscreenExit);
 
-      // Initialize HLS ONLY for m3u8 streams
       let hls: Hls;
       if (isM3U8) {
         if (Hls.isSupported()) {
@@ -205,7 +203,7 @@ function WatchContent() {
               source={{
                 type: "video",
                 sources: isM3U8 ? [] : [{ src: videoUrl, type: "video/mp4" }],
-                // Passing the subProxyUrl guarantees it is formatted correctly by the Edge API
+                // 2. Pass SubProxyUrl directly
                 tracks: subProxyUrl
                   ? [
                       {
