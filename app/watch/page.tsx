@@ -30,14 +30,12 @@ function WatchContent() {
   const [error, setError] = useState(false);
   const [subBlobUrl, setSubBlobUrl] = useState<string>("");
 
-  // 1. Load Episodes
   useEffect(() => {
     const load = async () => {
       try {
         const selectors = JSON.parse(
           localStorage.getItem("suku_selectors") || "null",
         );
-        // Make sure this points to your new api/data (or api/discover if you didn't rename it)
         const res = await fetch("/api/discover", {
           method: "POST",
           body: JSON.stringify({
@@ -58,7 +56,6 @@ function WatchContent() {
     load();
   }, [rawTitle]);
 
-  // 2. Fetch Subtitles Invisibly (The Blob Trick)
   useEffect(() => {
     let objectUrl = "";
     const fetchSub = async () => {
@@ -84,11 +81,10 @@ function WatchContent() {
     };
   }, [activeEp]);
 
-  // 3. Setup Video Routing
   const isM3U8 = activeEp?.url?.includes(".m3u8");
-  const videoUrl = isM3U8
-    ? `/api/stream?url=${encodeURIComponent(activeEp?.url || "")}`
-    : activeEp?.url;
+  const videoUrl = activeEp?.url
+    ? `/api/stream?url=${encodeURIComponent(activeEp.url)}`
+    : "";
 
   useEffect(() => {
     if (!videoUrl || error) return;
@@ -97,7 +93,7 @@ function WatchContent() {
       const video = document.querySelector("video");
       if (!video) return;
 
-      if (isM3U8) video.crossOrigin = "anonymous";
+      video.crossOrigin = "anonymous";
 
       const handleVideoError = () => {
         if (video.error && video.error.code !== 3) {
@@ -143,8 +139,22 @@ function WatchContent() {
 
           hls.on(Hls.Events.ERROR, (event, data) => {
             if (data.fatal) {
-              hls.destroy();
-              setError(true);
+              // --- SMART AUTO-RECOVERY LOGIC ---
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  console.log("Network glitched, retrying connection...");
+                  hls.startLoad();
+                  break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  console.log("Media dropped, attempting to recover...");
+                  hls.recoverMediaError();
+                  break;
+                default:
+                  // Only destroy and show error if it's completely unrecoverable
+                  hls.destroy();
+                  setError(true);
+                  break;
+              }
             }
           });
         } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
@@ -200,7 +210,6 @@ function WatchContent() {
       </div>
 
       <div className="max-w-4xl mx-auto px-2 mt-2">
-        {/* CRITICAL FIX: The `key` prevents React and Plyr from crashing the DOM */}
         <div
           key={`player-container-${activeEp?.label}-${error}`}
           className="rounded-xl overflow-hidden shadow-2xl bg-black aspect-video border border-white/5 relative"
@@ -228,9 +237,7 @@ function WatchContent() {
             <Plyr
               source={{
                 type: "video",
-                // MP4s get passed directly to Plyr. M3U8s are left empty for HLS.
                 sources: isM3U8 ? [] : [{ src: videoUrl, type: "video/mp4" }],
-                // Local Blob URL guarantees Subtitles load without CORS issues
                 tracks: subBlobUrl
                   ? [
                       {
