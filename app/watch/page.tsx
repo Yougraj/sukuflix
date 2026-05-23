@@ -2,7 +2,14 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { ChevronLeft, Loader2 } from "lucide-react";
+import {
+  ChevronLeft,
+  Loader2,
+  AlertCircle,
+  ExternalLink,
+  Mic,
+} from "lucide-react";
+import Hls from "hls.js";
 
 const Plyr = dynamic(() => import("plyr-react").then((m) => m.Plyr), {
   ssr: false,
@@ -11,85 +18,223 @@ const Plyr = dynamic(() => import("plyr-react").then((m) => m.Plyr), {
 function WatchContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const title = searchParams.get("title");
+  const rawTitle = searchParams.get("title") || "";
+
+  // Extract "Dub" from title for the UI
+  const isDub = rawTitle.toLowerCase().includes("dub");
+  const cleanTitle = rawTitle.replace(/\(?dub\)?/i, "").trim();
+
   const [episodes, setEpisodes] = useState([]);
   const [activeEp, setActiveEp] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     const load = async () => {
-      const selectors = JSON.parse(
-        localStorage.getItem("suku_selectors") || "null",
-      );
-      const res = await fetch("/api/scrape", {
-        method: "POST",
-        body: JSON.stringify({ action: "episodes", title, selectors }),
-      });
-      const data = await res.json();
-      setEpisodes(data);
-      if (data.length > 0) setActiveEp(data[0]);
-      setLoading(false);
+      try {
+        const selectors = JSON.parse(
+          localStorage.getItem("suku_selectors") || "null",
+        );
+        const res = await fetch("/api/scrape", {
+          method: "POST",
+          body: JSON.stringify({
+            action: "episodes",
+            title: rawTitle,
+            selectors,
+          }),
+        });
+        const data = await res.json();
+        setEpisodes(data);
+        if (data.length > 0) setActiveEp(data[0]);
+      } catch (err) {
+        setError(true);
+      } finally {
+        setLoading(false);
+      }
     };
     load();
-  }, [title]);
+  }, [rawTitle]);
+
+  useEffect(() => {
+    if (!activeEp?.url) return;
+    setError(false);
+
+    const timer = setTimeout(() => {
+      const video = document.querySelector("video");
+      if (!video) return;
+
+      video.crossOrigin = "anonymous";
+      const proxyUrl = `/api/proxy?url=${encodeURIComponent(activeEp.url)}`;
+
+      // --- MOBILE AUTO-ROTATE & FULLSCREEN LOGIC ---
+      const handlePlay = async () => {
+        if (window.innerWidth < 768) {
+          // Only trigger on mobile phones
+          try {
+            const plyrContainer = video.closest(".plyr");
+
+            // 1. Force Fullscreen
+            if (!document.fullscreenElement) {
+              if (plyrContainer?.requestFullscreen) {
+                await plyrContainer.requestFullscreen();
+              } else if ((video as any).webkitEnterFullscreen) {
+                (video as any).webkitEnterFullscreen(); // iOS Safari fallback
+              }
+            }
+
+            // 2. Force Landscape Rotation
+            if (screen.orientation && (screen.orientation as any).lock) {
+              await (screen.orientation as any).lock("landscape");
+            }
+          } catch (e) {
+            console.log("Auto-rotate locked by browser device settings.");
+          }
+        }
+      };
+
+      // Unlock rotation when exiting fullscreen
+      const handleFullscreenExit = () => {
+        if (!document.fullscreenElement && screen.orientation?.unlock) {
+          screen.orientation.unlock();
+        }
+      };
+
+      video.addEventListener("play", handlePlay);
+      document.addEventListener("fullscreenchange", handleFullscreenExit);
+
+      // --- HLS STREAMING LOGIC ---
+      if (activeEp.url.includes(".m3u8")) {
+        if (Hls.isSupported()) {
+          const hls = new Hls({ debug: false });
+          hls.loadSource(proxyUrl);
+          hls.attachMedia(video);
+
+          hls.on(Hls.Events.ERROR, (event, data) => {
+            if (data.fatal) {
+              if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                hls.startLoad();
+              } else {
+                hls.destroy();
+                setError(true);
+              }
+            }
+          });
+        } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+          video.src = proxyUrl;
+        }
+      } else {
+        video.src = proxyUrl;
+      }
+
+      return () => {
+        video.removeEventListener("play", handlePlay);
+        document.removeEventListener("fullscreenchange", handleFullscreenExit);
+      };
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [activeEp]);
 
   if (loading)
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4">
         <Loader2 className="animate-spin text-rose-600" size={40} />
-        <p className="text-zinc-600 font-bold uppercase tracking-widest text-xs">
-          Loading Stories...
+        <p className="text-zinc-600 font-bold text-[10px] uppercase tracking-widest">
+          Preparing the story...
         </p>
       </div>
     );
 
+  const subProxyUrl = activeEp?.sub
+    ? `/api/proxy?url=${encodeURIComponent(activeEp.sub)}`
+    : "";
+
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white pb-20">
-      <div className="p-4 flex items-center justify-between sticky top-0 bg-[#0a0a0a]/90 backdrop-blur-lg z-50">
+    <div className="min-h-screen bg-[#050505] text-white pb-20">
+      <div className="p-4 flex items-center justify-between sticky top-0 bg-[#050505]/90 backdrop-blur-xl z-50">
         <button
           onClick={() => router.back()}
-          className="text-rose-500 font-bold flex items-center"
+          className="p-2 -ml-2 text-rose-500 active:scale-90 transition"
         >
-          <ChevronLeft /> Back
+          <ChevronLeft size={28} />
         </button>
-        <h1 className="text-sm font-bold truncate max-w-[200px]">{title}</h1>
-      </div>
-
-      <div className="max-w-6xl mx-auto px-4 mt-4">
-        <div className="rounded-2xl overflow-hidden shadow-2xl bg-black border border-white/5 aspect-video">
-          {activeEp && (
-            <Plyr
-              source={{
-                type: "video",
-                sources: [{ src: activeEp.url, type: "video/mp4" }],
-                tracks: [
-                  {
-                    kind: "captions",
-                    label: "English",
-                    srcLang: "en",
-                    src: activeEp.sub,
-                    default: true,
-                  },
-                ],
-              }}
-              options={{ captions: { active: true, update: true } }}
-            />
+        <div className="flex-1 text-center px-2">
+          <h1 className="text-xs font-bold truncate uppercase tracking-tighter">
+            {cleanTitle}
+          </h1>
+          {isDub && (
+            <span className="text-[8px] font-black uppercase tracking-widest text-sky-400 bg-sky-900/30 px-2 py-0.5 rounded-full inline-flex items-center gap-1 mt-1">
+              <Mic size={8} /> DUBBED
+            </span>
           )}
         </div>
+        <div className="w-10" />
+      </div>
 
-        <div className="mt-10">
-          <h3 className="text-zinc-600 uppercase tracking-[0.3em] text-[10px] font-black mb-6">
-            Select Episode
-          </h3>
-          <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+      <div className="max-w-4xl mx-auto px-2 mt-2">
+        <div className="rounded-xl overflow-hidden shadow-2xl bg-black aspect-video border border-white/5 relative">
+          {error && (
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/90 p-6 text-center gap-4">
+              <AlertCircle className="text-rose-600 animate-bounce" size={40} />
+              <p className="text-sm font-bold text-rose-100">
+                Video Server Offline
+              </p>
+              <a
+                href={activeEp?.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 bg-rose-600 px-6 py-3 rounded-full font-black text-xs shadow-lg mt-2"
+              >
+                <ExternalLink size={16} /> Open Native Player
+              </a>
+            </div>
+          )}
+
+          <Plyr
+            source={{
+              type: "video",
+              sources: [{ src: "", type: "video/mp4" }], // Handled by HLS
+              tracks: subProxyUrl
+                ? [
+                    {
+                      kind: "captions",
+                      label: "English",
+                      srcLang: "en",
+                      src: subProxyUrl,
+                      default: true,
+                    },
+                  ]
+                : [],
+            }}
+            options={{
+              captions: { active: true, update: true, language: "en" },
+            }}
+          />
+        </div>
+
+        <div className="mt-8 px-2">
+          <div className="flex items-center mb-6">
+            <div className="h-px flex-1 bg-zinc-800"></div>
+            <h3 className="mx-4 text-zinc-500 uppercase tracking-[0.3em] text-[10px] font-black">
+              Episodes List
+            </h3>
+            <div className="h-px flex-1 bg-zinc-800"></div>
+          </div>
+
+          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
             {episodes.map((ep: any, i) => (
               <button
                 key={i}
                 onClick={() => {
                   setActiveEp(ep);
+                  setError(false);
                   window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
-                className={`py-4 rounded-xl font-black transition text-sm ${activeEp?.label === ep.label ? "bg-rose-600 text-white shadow-lg shadow-rose-900/40" : "bg-zinc-900 text-zinc-500"}`}
+                className={`py-4 rounded-xl font-black transition-all active:scale-90 text-sm border ${
+                  activeEp?.label === ep.label
+                    ? "bg-rose-600 border-rose-500 text-white shadow-[0_0_15px_rgba(225,29,72,0.4)]"
+                    : "bg-zinc-900/50 border-white/5 text-zinc-500 hover:bg-zinc-800"
+                }`}
               >
                 {i + 1}
               </button>

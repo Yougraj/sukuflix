@@ -6,7 +6,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { action, query, title, selectors, genre } = body;
 
-    // Default Selectors if none provided
+    // These selectors are based EXACTLY on the HTML you pasted
     const s = selectors || {
       card: "a.movie-card",
       title: ".movie-title",
@@ -17,17 +17,28 @@ export async function POST(req: Request) {
         "https://www.blogger.com/feeds/1422331367239821646/posts/default",
     };
 
+    const headers = {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      Referer: "https://kisskh.buzz/",
+      Origin: "https://kisskh.buzz",
+    };
+
     if (action === "search") {
       const formData = new URLSearchParams();
       formData.append("action", "fetch_live_movies");
       formData.append("keyword", query || "");
       formData.append("filter", genre || "all");
       formData.append("page", "1");
+      formData.append("is_popular", query === "" ? "1" : "0"); // If query is empty, get popular
 
       const res = await fetch(s.ajaxUrl, {
         method: "POST",
         body: formData,
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: {
+          ...headers,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
       });
 
       const html = await res.text();
@@ -35,22 +46,36 @@ export async function POST(req: Request) {
       const results: any[] = [];
 
       $(s.card).each((_, el) => {
-        results.push({
-          title: $(el).find(s.title).text().trim(),
-          link: $(el).attr("href"),
-          image: $(el).find(s.img).attr("src"),
-          ep: $(el).find(s.ep).text().trim() || "Full",
-        });
+        const titleText = $(el).find(s.title).text().trim();
+        const image = $(el).find(s.img).attr("src");
+        const link = $(el).attr("href");
+        const episode = $(el).find(s.ep).text().trim() || "Full";
+
+        if (titleText && image) {
+          results.push({
+            title: titleText,
+            link: link,
+            image: image,
+            ep: episode,
+          });
+        }
       });
       return NextResponse.json(results);
     }
 
     if (action === "episodes") {
+      // The Blogger API is the most reliable way to get the encrypted URLs
       const res = await fetch(
         `${s.bloggerUrl}?q=${encodeURIComponent(title)}&alt=json&max-results=1`,
+        {
+          headers: headers,
+        },
       );
       const data = await res.json();
-      if (!data.feed.entry) return NextResponse.json([]);
+
+      if (!data.feed || !data.feed.entry) return NextResponse.json([]);
+
+      // Get the post content which contains: URL | LANG | SUB_URL ;
       const content = data.feed.entry[0].content.$t;
       const eps = content
         .split(";")
@@ -64,11 +89,16 @@ export async function POST(req: Request) {
           };
         })
         .filter(Boolean);
+
       return NextResponse.json(eps);
     }
 
-    return NextResponse.json({ error: "Invalid Action" }, { status: 400 });
+    return NextResponse.json({ error: "No action specified" }, { status: 400 });
   } catch (e) {
-    return NextResponse.json({ error: "Connection Error" }, { status: 500 });
+    console.error("Scraper Error:", e);
+    return NextResponse.json(
+      { error: "Failed to connect to source" },
+      { status: 500 },
+    );
   }
 }

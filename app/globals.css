@@ -1,23 +1,64 @@
 @import "tailwindcss";
+/* Import Plyr styles here to avoid Next.js module errors */
 @import "plyr/dist/plyr.css";
+
+@theme {
+  /* Link Geist fonts to Tailwind classes (v4 syntax) */
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
 
 @layer base {
   body {
     background-color: #141414;
     color: #ffffff;
+    /* Force the font usage immediately to stop preload warnings */
+    font-family: var(--font-geist-sans), ui-sans-serif, system-ui;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
   }
 }
 
-.plyr--full-ui.plyr--video {
-  --plyr-color-main: #e11d48;
+/* --- Netflix Mobile UI Utilities --- */
+
+/* Hide scrollbars globally but allow scrolling */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
+/* Snap scrolling for horizontal movie rows */
+.snap-x {
+  scroll-snap-type: x mandatory;
+}
+.snap-center {
+  scroll-snap-align: center;
+}
+
+/* --- Video Player Customization (Rose Theme) --- */
+
+/* Changes the seeker and buttons to match your Suku Rose theme */
+.plyr--full-ui.plyr--video {
+  --plyr-color-main: #e11d48; /* rose-600 */
+}
+
+/* Adds a soft blur and color to the center play button */
 .plyr__control--overlaid {
   background: rgba(225, 29, 72, 0.8) !important;
+  backdrop-filter: blur(4px);
 }
 
-/* Rounded video corner hack for Plyr */
+/* Ensure the player has beautiful rounded corners like an app */
 .plyr {
-  border-radius: 1rem;
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+/* Fix for mobile touch highlight (removes blue box on click) */
+* {
+  -webkit-tap-highlight-color: transparent;
 }
