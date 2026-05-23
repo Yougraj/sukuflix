@@ -103,7 +103,7 @@ export default function MobileDashboard() {
               transition={{ delay: 0.5 }}
               className="mt-8 text-2xl font-black tracking-[0.2em] italic text-rose-100"
             >
-              WELCOME HOME, SUKU ❤️
+              WELCOME HOME, Deha ❤️
             </motion.h1>
             <p className="mt-2 text-zinc-600 text-[10px] uppercase font-bold tracking-widest">
               Everything is ready
