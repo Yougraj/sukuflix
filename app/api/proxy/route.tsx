@@ -1,8 +1,8 @@
 export const runtime = "edge";
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const targetUrl = searchParams.get("url");
+  const reqUrl = new URL(req.url);
+  const targetUrl = reqUrl.searchParams.get("url");
 
   if (!targetUrl) return new Response("No URL provided", { status: 400 });
 
@@ -16,9 +16,9 @@ export async function GET(req: Request) {
       },
     });
 
-    let contentType = res.headers.get("content-type") || "";
+    const contentType = res.headers.get("content-type") || "";
 
-    // --- SUBTITLE FIX: Force text/vtt format ---
+    // Subtitle Fix
     if (targetUrl.includes(".vtt") || targetUrl.includes(".srt")) {
       const text = await res.text();
       return new Response(text, {
@@ -30,14 +30,10 @@ export async function GET(req: Request) {
       });
     }
 
-    // --- VIDEO PROXY LOGIC ---
+    // Video Playlist Proxy Fix (Netlify reliable origin)
     if (contentType.includes("mpegurl") || targetUrl.includes(".m3u8")) {
       const text = await res.text();
-      const host = req.headers.get("host") || "localhost:3000";
-      const protocol =
-        req.headers.get("x-forwarded-proto") ||
-        (host.includes("localhost") ? "http" : "https");
-      const baseApiUrl = `${protocol}://${host}/api/proxy?url=`;
+      const baseApiUrl = `${reqUrl.origin}/api/proxy?url=`;
 
       const rewritten = text
         .split("\n")
@@ -52,6 +48,7 @@ export async function GET(req: Request) {
             });
           }
           if (trimmed.startsWith("#") || trimmed === "") return line;
+
           const absUrl = trimmed.startsWith("http")
             ? trimmed
             : new URL(trimmed, res.url).href;
@@ -68,6 +65,7 @@ export async function GET(req: Request) {
       });
     }
 
+    // Stream Video Chunks
     return new Response(res.body, {
       headers: {
         "Content-Type": contentType,

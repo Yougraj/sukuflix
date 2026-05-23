@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 // Primary Metadata and Video referer fix
 export const metadata: Metadata = {
   title: "Suku Flix",
-  description: "Made with love for Suku ❤️",
+  description: "Made with love for Deha ❤️",
   referrer: "no-referrer", // Prevents video hosts from blocking the stream
 };
 

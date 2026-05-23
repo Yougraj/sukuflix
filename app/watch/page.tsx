@@ -20,7 +20,6 @@ function WatchContent() {
   const router = useRouter();
   const rawTitle = searchParams.get("title") || "";
 
-  // Extract "Dub" from title for the UI
   const isDub = rawTitle.toLowerCase().includes("dub");
   const cleanTitle = rawTitle.replace(/\(?dub\)?/i, "").trim();
 
@@ -66,33 +65,24 @@ function WatchContent() {
       video.crossOrigin = "anonymous";
       const proxyUrl = `/api/proxy?url=${encodeURIComponent(activeEp.url)}`;
 
-      // --- MOBILE AUTO-ROTATE & FULLSCREEN LOGIC ---
+      // Auto Rotate Logic
       const handlePlay = async () => {
         if (window.innerWidth < 768) {
-          // Only trigger on mobile phones
           try {
             const plyrContainer = video.closest(".plyr");
-
-            // 1. Force Fullscreen
             if (!document.fullscreenElement) {
-              if (plyrContainer?.requestFullscreen) {
+              if (plyrContainer?.requestFullscreen)
                 await plyrContainer.requestFullscreen();
-              } else if ((video as any).webkitEnterFullscreen) {
-                (video as any).webkitEnterFullscreen(); // iOS Safari fallback
-              }
+              else if ((video as any).webkitEnterFullscreen)
+                (video as any).webkitEnterFullscreen();
             }
-
-            // 2. Force Landscape Rotation
             if (screen.orientation && (screen.orientation as any).lock) {
               await (screen.orientation as any).lock("landscape");
             }
-          } catch (e) {
-            console.log("Auto-rotate locked by browser device settings.");
-          }
+          } catch (e) {}
         }
       };
 
-      // Unlock rotation when exiting fullscreen
       const handleFullscreenExit = () => {
         if (!document.fullscreenElement && screen.orientation?.unlock) {
           screen.orientation.unlock();
@@ -102,7 +92,7 @@ function WatchContent() {
       video.addEventListener("play", handlePlay);
       document.addEventListener("fullscreenchange", handleFullscreenExit);
 
-      // --- HLS STREAMING LOGIC ---
+      // HLS Logic
       if (activeEp.url.includes(".m3u8")) {
         if (Hls.isSupported()) {
           const hls = new Hls({ debug: false });
@@ -191,21 +181,22 @@ function WatchContent() {
           )}
 
           <Plyr
-            source={{
-              type: "video",
-              sources: [{ src: "", type: "video/mp4" }], // Handled by HLS
-              tracks: subProxyUrl
-                ? [
-                    {
-                      kind: "captions",
-                      label: "English",
-                      srcLang: "en",
-                      src: subProxyUrl,
-                      default: true,
-                    },
-                  ]
-                : [],
-            }}
+            source={
+              subProxyUrl
+                ? ({
+                    type: "video",
+                    tracks: [
+                      {
+                        kind: "captions",
+                        label: "English",
+                        srcLang: "en",
+                        src: subProxyUrl,
+                        default: true,
+                      },
+                    ],
+                  } as any)
+                : ({} as any)
+            }
             options={{
               captions: { active: true, update: true, language: "en" },
             }}
