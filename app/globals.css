@@ -1,51 +1,23 @@
 @import "tailwindcss";
 @import "plyr/dist/plyr.css";
 
-/* Tailwind 4 uses standard CSS variables for the theme */
 @layer base {
   body {
     background-color: #141414;
     color: #ffffff;
-    font-family:
-      ui-sans-serif,
-      system-ui,
-      -apple-system,
-      BlinkMacSystemFont,
-      "Segoe UI",
-      Roboto,
-      "Helvetica Neue",
-      Arial,
-      sans-serif;
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    overflow-x: hidden;
   }
 }
 
-/* --- Netflix Mobile UI Utilities --- */
-
-/* Hide scrollbar but keep functionality */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
-/* Snapping carousels */
-.snap-x {
-  scroll-snap-type: x mandatory;
-}
-.snap-center {
-  scroll-snap-align: center;
-}
-
-/* Custom Plyr Theme Colors */
 .plyr--full-ui.plyr--video {
-  --plyr-color-main: #e11d48; /* rose-600 */
+  --plyr-color-main: #e11d48;
 }
 
 .plyr__control--overlaid {
   background: rgba(225, 29, 72, 0.8) !important;
+}
+
+/* Rounded video corner hack for Plyr */
+.plyr {
+  border-radius: 1rem;
 }
