@@ -22,7 +22,7 @@ export async function GET(req: Request) {
       },
     });
 
-    // 2. ERROR CATCHER (Returns an empty subtitle file so the player doesn't crash)
+    // 2. ERROR CATCHER
     if (!res.ok) {
       if (isSub)
         return new Response("WEBVTT\n\n", {
@@ -36,9 +36,22 @@ export async function GET(req: Request) {
 
     let contentType = res.headers.get("content-type") || "";
 
-    // 3. SUBTITLE FORMATTER
-    if (isSub || targetUrl.includes(".vtt") || targetUrl.includes(".srt")) {
-      const text = await res.text();
+    // 3. SUBTITLE FORMATTER & CONVERTER
+    if (
+      isSub ||
+      contentType.includes("vtt") ||
+      targetUrl.includes(".vtt") ||
+      targetUrl.includes(".srt")
+    ) {
+      let text = await res.text();
+
+      // Browsers STRICTLY require the file to start with WEBVTT.
+      // If it's an SRT file, we convert it to VTT on the fly so it actually displays!
+      if (!text.trim().startsWith("WEBVTT")) {
+        text =
+          "WEBVTT\n\n" + text.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2");
+      }
+
       return new Response(text, {
         headers: {
           "Content-Type": "text/vtt; charset=utf-8",

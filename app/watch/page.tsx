@@ -61,11 +61,8 @@ function WatchContent() {
     ? `/api/stream?url=${encodeURIComponent(activeEp?.url || "")}`
     : activeEp?.url;
 
-  // Only mount subtitles if they are actually valid VTT/SRT links
-  const isValidSub =
-    activeEp?.sub &&
-    (activeEp.sub.includes(".vtt") || activeEp.sub.includes(".srt"));
-  const subProxyUrl = isValidSub
+  // FIXED: No longer requiring .vtt extension in the URL, as long as `sub` exists, we proxy it!
+  const subProxyUrl = activeEp?.sub
     ? `/api/stream?url=${encodeURIComponent(activeEp.sub)}&isSub=true`
     : "";
 
@@ -76,7 +73,6 @@ function WatchContent() {
       const video = document.querySelector("video");
       if (!video) return;
 
-      // DO NOT use crossOrigin="anonymous" for MP4s, it breaks servers like Rumble.
       if (isM3U8) video.crossOrigin = "anonymous";
 
       const handleVideoError = () => {
@@ -181,7 +177,6 @@ function WatchContent() {
       </div>
 
       <div className="max-w-4xl mx-auto px-2 mt-2">
-        {/* Strict Key prevents React from crashing when changing episodes */}
         <div
           key={`player-${activeEp?.label || "empty"}-${error}`}
           className="rounded-xl overflow-hidden shadow-2xl bg-black aspect-video border border-white/5 relative"
@@ -209,8 +204,8 @@ function WatchContent() {
             <Plyr
               source={{
                 type: "video",
-                // ONLY pass MP4s to Plyr. HLS handles M3U8.
                 sources: isM3U8 ? [] : [{ src: videoUrl, type: "video/mp4" }],
+                // Passing the subProxyUrl guarantees it is formatted correctly by the Edge API
                 tracks: subProxyUrl
                   ? [
                       {
