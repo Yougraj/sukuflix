@@ -17,21 +17,30 @@ export async function GET(req: Request) {
       },
     });
 
+    // 1. IF CLOUDFLARE BLOCKS US, STOP AND RETURN ERROR TO FRONTEND
+    if (!res.ok) {
+      return new Response("Blocked by Upstream Server", { status: res.status });
+    }
+
     let contentType = res.headers.get("content-type") || "";
 
-    // --- SUBTITLE GUARANTEE FIX ---
-    // Browsers strictly block subtitles if they are not explicitly "text/vtt"
-    if (isSub || targetUrl.includes(".vtt") || targetUrl.includes(".srt")) {
+    // 2. STRICT SUBTITLE CHECK
+    if (
+      isSub ||
+      contentType.includes("vtt") ||
+      targetUrl.endsWith(".vtt") ||
+      targetUrl.endsWith(".srt")
+    ) {
       const text = await res.text();
       return new Response(text, {
         headers: {
           "Content-Type": "text/vtt; charset=utf-8",
           "Access-Control-Allow-Origin": "*",
-          "Cache-Control": "public, max-age=86400",
         },
       });
     }
 
+    // 3. M3U8 PLAYLIST PROCESSING
     if (contentType.includes("mpegurl") || targetUrl.includes(".m3u8")) {
       const text = await res.text();
       const baseApiUrl = `${reqUrl.origin}/api/stream?url=`;
@@ -44,7 +53,7 @@ export async function GET(req: Request) {
             return trimmed.replace(/URI="(.*?)"/g, (match, url) => {
               const absUrl = url.startsWith("http")
                 ? url
-                : new URL(url, res.url).href;
+                : new URL(url, targetUrl).href;
               return `URI="${baseApiUrl}${encodeURIComponent(absUrl)}"`;
             });
           }
@@ -52,7 +61,7 @@ export async function GET(req: Request) {
 
           const absUrl = trimmed.startsWith("http")
             ? trimmed
-            : new URL(trimmed, res.url).href;
+            : new URL(trimmed, targetUrl).href;
           return `${baseApiUrl}${encodeURIComponent(absUrl)}`;
         })
         .join("\n");
@@ -61,14 +70,14 @@ export async function GET(req: Request) {
         headers: {
           "Content-Type": "application/vnd.apple.mpegurl",
           "Access-Control-Allow-Origin": "*",
-          "Cache-Control": "no-store",
         },
       });
     }
 
+    // 4. STANDARD MP4 / TS CHUNKS
     return new Response(res.body, {
       headers: {
-        "Content-Type": contentType,
+        "Content-Type": contentType || "video/mp4",
         "Access-Control-Allow-Origin": "*",
         "Cache-Control": "public, max-age=86400",
       },
