@@ -7,12 +7,14 @@ const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
   display: "swap", // Improves loading performance
+  preload: false, // Stops the "preloaded but not used" console warning
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
   display: "swap",
+  preload: false, // Stops the "preloaded but not used" console warning
 });
 
 // Primary Metadata and Video referer fix
