@@ -55,26 +55,32 @@ function WatchContent() {
     load();
   }, [rawTitle]);
 
+  // SMART URL ROUTING
   const isM3U8 = activeEp?.url?.includes(".m3u8");
-  const proxyUrl = activeEp?.url
-    ? `/api/stream?url=${encodeURIComponent(activeEp.url)}`
-    : "";
-  const subProxyUrl = activeEp?.sub
+  const videoUrl = isM3U8
+    ? `/api/stream?url=${encodeURIComponent(activeEp?.url || "")}`
+    : activeEp?.url;
+
+  // Only mount subtitles if they are actually valid VTT/SRT links
+  const isValidSub =
+    activeEp?.sub &&
+    (activeEp.sub.includes(".vtt") || activeEp.sub.includes(".srt"));
+  const subProxyUrl = isValidSub
     ? `/api/stream?url=${encodeURIComponent(activeEp.sub)}&isSub=true`
     : "";
 
   useEffect(() => {
-    if (!activeEp?.url || error) return;
+    if (!videoUrl || error) return;
 
     const timer = setTimeout(() => {
       const video = document.querySelector("video");
       if (!video) return;
 
-      video.crossOrigin = "anonymous";
+      // DO NOT use crossOrigin="anonymous" for MP4s, it breaks servers like Rumble.
+      if (isM3U8) video.crossOrigin = "anonymous";
 
       const handleVideoError = () => {
         if (video.error && video.error.code !== 3) {
-          console.error("Native Video Error", video.error);
           setError(true);
         }
       };
@@ -108,38 +114,22 @@ function WatchContent() {
       video.addEventListener("play", handlePlay);
       document.addEventListener("fullscreenchange", handleFullscreenExit);
 
-      // --- HLS LOGIC WITH AUTO-RECOVERY ---
+      // Initialize HLS ONLY for m3u8 streams
       let hls: Hls;
       if (isM3U8) {
         if (Hls.isSupported()) {
           hls = new Hls({ debug: false, enableWorker: true });
-          hls.loadSource(proxyUrl);
+          hls.loadSource(videoUrl);
           hls.attachMedia(video);
 
           hls.on(Hls.Events.ERROR, (event, data) => {
             if (data.fatal) {
-              console.warn("HLS Fatal Error:", data.type);
-              switch (data.type) {
-                case Hls.ErrorTypes.NETWORK_ERROR:
-                  // Network dropped, try to reconnect
-                  console.log("Attempting network recovery...");
-                  hls.startLoad();
-                  break;
-                case Hls.ErrorTypes.MEDIA_ERROR:
-                  // Video glitched, auto-recover the stream without crashing
-                  console.log("Attempting media recovery...");
-                  hls.recoverMediaError();
-                  break;
-                default:
-                  // Only destroy and show error screen if it's completely unrecoverable
-                  hls.destroy();
-                  setError(true);
-                  break;
-              }
+              hls.destroy();
+              setError(true);
             }
           });
         } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-          video.src = proxyUrl;
+          video.src = videoUrl;
         }
       }
 
@@ -152,7 +142,7 @@ function WatchContent() {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [activeEp, error, isM3U8, proxyUrl]);
+  }, [activeEp, error, isM3U8, videoUrl]);
 
   if (loading)
     return (
@@ -191,8 +181,9 @@ function WatchContent() {
       </div>
 
       <div className="max-w-4xl mx-auto px-2 mt-2">
+        {/* Strict Key prevents React from crashing when changing episodes */}
         <div
-          key={`player-wrapper-${activeEp?.label || "empty"}-${error}`}
+          key={`player-${activeEp?.label || "empty"}-${error}`}
           className="rounded-xl overflow-hidden shadow-2xl bg-black aspect-video border border-white/5 relative"
         >
           {error ? (
@@ -218,7 +209,8 @@ function WatchContent() {
             <Plyr
               source={{
                 type: "video",
-                sources: isM3U8 ? [] : [{ src: proxyUrl, type: "video/mp4" }],
+                // ONLY pass MP4s to Plyr. HLS handles M3U8.
+                sources: isM3U8 ? [] : [{ src: videoUrl, type: "video/mp4" }],
                 tracks: subProxyUrl
                   ? [
                       {

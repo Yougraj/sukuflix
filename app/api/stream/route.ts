@@ -7,6 +7,11 @@ export async function GET(req: Request) {
 
   if (!targetUrl) return new Response("No URL provided", { status: 400 });
 
+  // 1. SMART REDIRECT FOR MP4s (Prevents Netlify from timing out on large movies)
+  if (targetUrl.includes(".mp4") && !isSub) {
+    return Response.redirect(targetUrl, 302);
+  }
+
   try {
     const res = await fetch(targetUrl, {
       headers: {
@@ -17,29 +22,22 @@ export async function GET(req: Request) {
       },
     });
 
-    // --- GRACEFUL ERROR HANDLING ---
+    // 2. ERROR CATCHER (Returns an empty subtitle file so the player doesn't crash)
     if (!res.ok) {
-      if (isSub) {
-        // If subtitles are blocked, return an empty subtitle file so the video doesn't crash
+      if (isSub)
         return new Response("WEBVTT\n\n", {
           headers: {
             "Content-Type": "text/vtt",
             "Access-Control-Allow-Origin": "*",
           },
         });
-      }
-      return new Response("Video Server Blocked", { status: res.status });
+      return new Response("Server Blocked", { status: res.status });
     }
 
     let contentType = res.headers.get("content-type") || "";
 
-    // --- SUBTITLES ---
-    if (
-      isSub ||
-      contentType.includes("vtt") ||
-      targetUrl.endsWith(".vtt") ||
-      targetUrl.endsWith(".srt")
-    ) {
+    // 3. SUBTITLE FORMATTER
+    if (isSub || targetUrl.includes(".vtt") || targetUrl.includes(".srt")) {
       const text = await res.text();
       return new Response(text, {
         headers: {
@@ -50,7 +48,7 @@ export async function GET(req: Request) {
       });
     }
 
-    // --- M3U8 PLAYLIST REWRITING ---
+    // 4. M3U8 PLAYLIST REWRITER
     if (contentType.includes("mpegurl") || targetUrl.includes(".m3u8")) {
       const text = await res.text();
       const baseApiUrl = `${reqUrl.origin}/api/stream?url=`;
@@ -84,10 +82,10 @@ export async function GET(req: Request) {
       });
     }
 
-    // --- MP4 / STANDARD VIDEO ---
+    // 5. STANDARD CHUNKS (.TS)
     return new Response(res.body, {
       headers: {
-        "Content-Type": contentType || "video/mp4",
+        "Content-Type": contentType || "video/mp2t",
         "Access-Control-Allow-Origin": "*",
         "Cache-Control": "public, max-age=86400",
       },
