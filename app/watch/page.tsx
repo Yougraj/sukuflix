@@ -72,10 +72,8 @@ function WatchContent() {
 
       video.crossOrigin = "anonymous";
 
-      // Native Video Error Catcher
       const handleVideoError = () => {
         if (video.error && video.error.code !== 3) {
-          // 3 is Decode error, often a false positive
           console.error("Native Video Error", video.error);
           setError(true);
         }
@@ -110,6 +108,7 @@ function WatchContent() {
       video.addEventListener("play", handlePlay);
       document.addEventListener("fullscreenchange", handleFullscreenExit);
 
+      // --- HLS LOGIC WITH AUTO-RECOVERY ---
       let hls: Hls;
       if (isM3U8) {
         if (Hls.isSupported()) {
@@ -119,9 +118,24 @@ function WatchContent() {
 
           hls.on(Hls.Events.ERROR, (event, data) => {
             if (data.fatal) {
-              console.error("HLS Error", data.type);
-              hls.destroy();
-              setError(true);
+              console.warn("HLS Fatal Error:", data.type);
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  // Network dropped, try to reconnect
+                  console.log("Attempting network recovery...");
+                  hls.startLoad();
+                  break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  // Video glitched, auto-recover the stream without crashing
+                  console.log("Attempting media recovery...");
+                  hls.recoverMediaError();
+                  break;
+                default:
+                  // Only destroy and show error screen if it's completely unrecoverable
+                  hls.destroy();
+                  setError(true);
+                  break;
+              }
             }
           });
         } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
@@ -177,8 +191,10 @@ function WatchContent() {
       </div>
 
       <div className="max-w-4xl mx-auto px-2 mt-2">
-        <div className="rounded-xl overflow-hidden shadow-2xl bg-black aspect-video border border-white/5 relative">
-          {/* Unmount Plyr completely if there is an error to prevent React DOM collisions */}
+        <div
+          key={`player-wrapper-${activeEp?.label || "empty"}-${error}`}
+          className="rounded-xl overflow-hidden shadow-2xl bg-black aspect-video border border-white/5 relative"
+        >
           {error ? (
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/90 p-6 text-center gap-4">
               <AlertCircle className="text-rose-600 animate-bounce" size={40} />
@@ -200,10 +216,8 @@ function WatchContent() {
             </div>
           ) : (
             <Plyr
-              key={activeEp?.label}
               source={{
                 type: "video",
-                // If it's an MP4, feed it natively to Plyr. If it's M3U8, let HLS.js handle it (empty sources).
                 sources: isM3U8 ? [] : [{ src: proxyUrl, type: "video/mp4" }],
                 tracks: subProxyUrl
                   ? [
@@ -239,8 +253,8 @@ function WatchContent() {
               <button
                 key={i}
                 onClick={() => {
-                  setActiveEp(ep);
                   setError(false);
+                  setActiveEp(ep);
                   window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
                 className={`py-4 rounded-xl font-black transition-all active:scale-90 text-sm border ${
