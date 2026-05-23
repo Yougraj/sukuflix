@@ -15,6 +15,7 @@ import {
   X,
   ChevronRight,
   Mic,
+  Languages,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -45,7 +46,7 @@ export default function MobileDashboard() {
       const selectors = JSON.parse(
         localStorage.getItem("suku_selectors") || "null",
       );
-      const res = await fetch("/api/scrape", {
+      const res = await fetch("/api/discover", {
         method: "POST",
         body: JSON.stringify({
           action: "search",
@@ -102,7 +103,7 @@ export default function MobileDashboard() {
               transition={{ delay: 0.5 }}
               className="mt-8 text-2xl font-black tracking-[0.2em] italic text-rose-100"
             >
-              WELCOME HOME, DEHA ❤️
+              WELCOME HOME, SUKU ❤️
             </motion.h1>
             <p className="mt-2 text-zinc-600 text-[10px] uppercase font-bold tracking-widest">
               Everything is ready
@@ -227,11 +228,14 @@ export default function MobileDashboard() {
                           loading="lazy"
                         />
 
-                        {/* Sub/Dub Badges */}
                         <div className="absolute top-2 left-2 flex flex-col gap-1">
-                          {isDub && (
+                          {isDub ? (
                             <span className="bg-sky-600/90 backdrop-blur-md text-[8px] font-black px-1.5 py-0.5 rounded shadow-lg flex items-center gap-1">
                               <Mic size={8} /> DUB
+                            </span>
+                          ) : (
+                            <span className="bg-emerald-600/90 backdrop-blur-md text-[8px] font-black px-1.5 py-0.5 rounded shadow-lg flex items-center gap-1">
+                              <Languages size={8} /> SUB
                             </span>
                           )}
                         </div>
@@ -251,7 +255,6 @@ export default function MobileDashboard() {
           </motion.div>
         )}
 
-        {/* Other views remain exactly the same as previously formatted... */}
         {view === "search" && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -273,11 +276,17 @@ export default function MobileDashboard() {
                       src={item.image}
                       className="w-full h-full object-cover"
                     />
-                    {isDub && (
-                      <span className="absolute top-2 left-2 bg-sky-600/90 backdrop-blur-md text-[8px] font-black px-1.5 py-0.5 rounded shadow-lg">
-                        DUB
-                      </span>
-                    )}
+                    <div className="absolute top-2 left-2 flex flex-col gap-1">
+                      {isDub ? (
+                        <span className="bg-sky-600/90 backdrop-blur-md text-[8px] font-black px-1.5 py-0.5 rounded shadow-lg flex items-center gap-1">
+                          <Mic size={8} /> DUB
+                        </span>
+                      ) : (
+                        <span className="bg-emerald-600/90 backdrop-blur-md text-[8px] font-black px-1.5 py-0.5 rounded shadow-lg flex items-center gap-1">
+                          <Languages size={8} /> SUB
+                        </span>
+                      )}
+                    </div>
                     <div className="absolute top-2 right-2 bg-rose-600/90 backdrop-blur-md text-[10px] font-black px-2 py-0.5 rounded shadow-lg">
                       {item.ep}
                     </div>

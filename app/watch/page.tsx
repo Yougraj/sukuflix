@@ -8,6 +8,7 @@ import {
   AlertCircle,
   ExternalLink,
   Mic,
+  Languages,
 } from "lucide-react";
 import Hls from "hls.js";
 
@@ -23,7 +24,7 @@ function WatchContent() {
   const isDub = rawTitle.toLowerCase().includes("dub");
   const cleanTitle = rawTitle.replace(/\(?dub\)?/i, "").trim();
 
-  const [episodes, setEpisodes] = useState([]);
+  const [episodes, setEpisodes] = useState<any[]>([]);
   const [activeEp, setActiveEp] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -34,7 +35,7 @@ function WatchContent() {
         const selectors = JSON.parse(
           localStorage.getItem("suku_selectors") || "null",
         );
-        const res = await fetch("/api/scrape", {
+        const res = await fetch("/api/discover", {
           method: "POST",
           body: JSON.stringify({
             action: "episodes",
@@ -62,22 +63,25 @@ function WatchContent() {
       const video = document.querySelector("video");
       if (!video) return;
 
+      // Ensure CORS so subtitles are allowed by the browser
       video.crossOrigin = "anonymous";
-      const proxyUrl = `/api/proxy?url=${encodeURIComponent(activeEp.url)}`;
+      const proxyUrl = `/api/stream?url=${encodeURIComponent(activeEp.url)}`;
 
-      // Auto Rotate Logic
+      // --- AUTO-ROTATE & FULLSCREEN LOGIC ---
       const handlePlay = async () => {
         if (window.innerWidth < 768) {
           try {
             const plyrContainer = video.closest(".plyr");
-            if (!document.fullscreenElement) {
-              if (plyrContainer?.requestFullscreen)
-                await plyrContainer.requestFullscreen();
-              else if ((video as any).webkitEnterFullscreen)
-                (video as any).webkitEnterFullscreen();
+            if (
+              !document.fullscreenElement &&
+              plyrContainer?.requestFullscreen
+            ) {
+              await plyrContainer.requestFullscreen();
+            } else if ((video as any).webkitEnterFullscreen) {
+              (video as any).webkitEnterFullscreen(); // iOS Fallback
             }
             if (screen.orientation && (screen.orientation as any).lock) {
-              await (screen.orientation as any).lock("landscape");
+              await (screen.orientation as any).lock("landscape"); // Lock to Landscape
             }
           } catch (e) {}
         }
@@ -85,14 +89,14 @@ function WatchContent() {
 
       const handleFullscreenExit = () => {
         if (!document.fullscreenElement && screen.orientation?.unlock) {
-          screen.orientation.unlock();
+          screen.orientation.unlock(); // Unlock when she exits fullscreen
         }
       };
 
       video.addEventListener("play", handlePlay);
       document.addEventListener("fullscreenchange", handleFullscreenExit);
 
-      // HLS Logic
+      // --- HLS LOGIC ---
       if (activeEp.url.includes(".m3u8")) {
         if (Hls.isSupported()) {
           const hls = new Hls({ debug: false });
@@ -135,9 +139,11 @@ function WatchContent() {
       </div>
     );
 
+  // Append isSub=true to guarantee it gets the VTT headers
   const subProxyUrl = activeEp?.sub
-    ? `/api/proxy?url=${encodeURIComponent(activeEp.sub)}`
+    ? `/api/stream?url=${encodeURIComponent(activeEp.sub)}&isSub=true`
     : "";
+  const videoProxyUrl = `/api/stream?url=${encodeURIComponent(activeEp?.url || "")}`;
 
   return (
     <div className="min-h-screen bg-[#050505] text-white pb-20">
@@ -152,9 +158,14 @@ function WatchContent() {
           <h1 className="text-xs font-bold truncate uppercase tracking-tighter">
             {cleanTitle}
           </h1>
-          {isDub && (
+          {/* DUB / SUB Indicators */}
+          {isDub ? (
             <span className="text-[8px] font-black uppercase tracking-widest text-sky-400 bg-sky-900/30 px-2 py-0.5 rounded-full inline-flex items-center gap-1 mt-1">
               <Mic size={8} /> DUBBED
+            </span>
+          ) : (
+            <span className="text-[8px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-900/30 px-2 py-0.5 rounded-full inline-flex items-center gap-1 mt-1">
+              <Languages size={8} /> SUBBED
             </span>
           )}
         </div>
@@ -167,38 +178,40 @@ function WatchContent() {
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/90 p-6 text-center gap-4">
               <AlertCircle className="text-rose-600 animate-bounce" size={40} />
               <p className="text-sm font-bold text-rose-100">
-                Video Server Offline
+                Video Server Locked
               </p>
               <a
                 href={activeEp?.url}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-2 bg-rose-600 px-6 py-3 rounded-full font-black text-xs shadow-lg mt-2"
+                className="flex items-center gap-2 bg-rose-600 px-6 py-3 rounded-full font-black text-xs shadow-lg mt-2 active:scale-95 transition"
               >
                 <ExternalLink size={16} /> Open Native Player
               </a>
             </div>
           )}
 
+          {/* Key ensures Plyr completely restarts on new episode to load correct subtitles */}
           <Plyr
-            source={
-              subProxyUrl
-                ? ({
-                    type: "video",
-                    tracks: [
-                      {
-                        kind: "captions",
-                        label: "English",
-                        srcLang: "en",
-                        src: subProxyUrl,
-                        default: true,
-                      },
-                    ],
-                  } as any)
-                : ({} as any)
-            }
+            key={activeEp?.label}
+            source={{
+              type: "video",
+              sources: [{ src: videoProxyUrl, type: "video/mp4" }],
+              tracks: subProxyUrl
+                ? [
+                    {
+                      kind: "captions",
+                      label: "English",
+                      srcLang: "en",
+                      src: subProxyUrl,
+                      default: true,
+                    },
+                  ]
+                : [],
+            }}
             options={{
               captions: { active: true, update: true, language: "en" },
+              fullscreen: { enabled: true, fallback: true, iosNative: true },
             }}
           />
         </div>

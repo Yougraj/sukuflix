@@ -6,7 +6,6 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { action, query, title, selectors, genre } = body;
 
-    // These selectors are based EXACTLY on the HTML you pasted
     const s = selectors || {
       card: "a.movie-card",
       title: ".movie-title",
@@ -30,7 +29,7 @@ export async function POST(req: Request) {
       formData.append("keyword", query || "");
       formData.append("filter", genre || "all");
       formData.append("page", "1");
-      formData.append("is_popular", query === "" ? "1" : "0"); // If query is empty, get popular
+      formData.append("is_popular", query === "" ? "1" : "0");
 
       const res = await fetch(s.ajaxUrl, {
         method: "POST",
@@ -52,30 +51,21 @@ export async function POST(req: Request) {
         const episode = $(el).find(s.ep).text().trim() || "Full";
 
         if (titleText && image) {
-          results.push({
-            title: titleText,
-            link: link,
-            image: image,
-            ep: episode,
-          });
+          results.push({ title: titleText, link, image, ep: episode });
         }
       });
       return NextResponse.json(results);
     }
 
     if (action === "episodes") {
-      // The Blogger API is the most reliable way to get the encrypted URLs
       const res = await fetch(
         `${s.bloggerUrl}?q=${encodeURIComponent(title)}&alt=json&max-results=1`,
-        {
-          headers: headers,
-        },
+        { headers },
       );
       const data = await res.json();
 
       if (!data.feed || !data.feed.entry) return NextResponse.json([]);
 
-      // Get the post content which contains: URL | LANG | SUB_URL ;
       const content = data.feed.entry[0].content.$t;
       const eps = content
         .split(";")
@@ -93,11 +83,10 @@ export async function POST(req: Request) {
       return NextResponse.json(eps);
     }
 
-    return NextResponse.json({ error: "No action specified" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid Action" }, { status: 400 });
   } catch (e) {
-    console.error("Scraper Error:", e);
     return NextResponse.json(
-      { error: "Failed to connect to source" },
+      { error: "Server Connection Error" },
       { status: 500 },
     );
   }

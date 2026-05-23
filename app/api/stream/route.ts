@@ -3,6 +3,7 @@ export const runtime = "edge";
 export async function GET(req: Request) {
   const reqUrl = new URL(req.url);
   const targetUrl = reqUrl.searchParams.get("url");
+  const isSub = reqUrl.searchParams.get("isSub") === "true";
 
   if (!targetUrl) return new Response("No URL provided", { status: 400 });
 
@@ -16,24 +17,24 @@ export async function GET(req: Request) {
       },
     });
 
-    const contentType = res.headers.get("content-type") || "";
+    let contentType = res.headers.get("content-type") || "";
 
-    // Subtitle Fix
-    if (targetUrl.includes(".vtt") || targetUrl.includes(".srt")) {
+    // --- SUBTITLE GUARANTEE FIX ---
+    // Browsers strictly block subtitles if they are not explicitly "text/vtt"
+    if (isSub || targetUrl.includes(".vtt") || targetUrl.includes(".srt")) {
       const text = await res.text();
       return new Response(text, {
         headers: {
-          "Content-Type": "text/vtt",
+          "Content-Type": "text/vtt; charset=utf-8",
           "Access-Control-Allow-Origin": "*",
           "Cache-Control": "public, max-age=86400",
         },
       });
     }
 
-    // Video Playlist Proxy Fix (Netlify reliable origin)
     if (contentType.includes("mpegurl") || targetUrl.includes(".m3u8")) {
       const text = await res.text();
-      const baseApiUrl = `${reqUrl.origin}/api/proxy?url=`;
+      const baseApiUrl = `${reqUrl.origin}/api/stream?url=`;
 
       const rewritten = text
         .split("\n")
@@ -65,7 +66,6 @@ export async function GET(req: Request) {
       });
     }
 
-    // Stream Video Chunks
     return new Response(res.body, {
       headers: {
         "Content-Type": contentType,
@@ -74,6 +74,6 @@ export async function GET(req: Request) {
       },
     });
   } catch (error) {
-    return new Response("Proxy Error", { status: 500 });
+    return new Response("Stream Error", { status: 500 });
   }
 }
