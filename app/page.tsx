@@ -24,18 +24,24 @@ export default function MobileDashboard() {
     "home" | "search" | "history" | "settings" | "advanced" | "genre"
   >("home");
   const [showIntro, setShowIntro] = useState(true);
+
+  // TypeScript Fix: Explicitly declare as any[]
   const [results, setResults] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
+
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
+  // Load user data and initial content
   useEffect(() => {
     const savedHistory = JSON.parse(
       localStorage.getItem("suku_history") || "[]",
     );
     setHistory(savedHistory);
     fetchContent("all");
+
+    // Hide intro after animation
     const timer = setTimeout(() => setShowIntro(false), 2800);
     return () => clearTimeout(timer);
   }, []);
@@ -46,7 +52,8 @@ export default function MobileDashboard() {
       const selectors = JSON.parse(
         localStorage.getItem("suku_selectors") || "null",
       );
-      const res = await fetch("/api/discover", {
+      // Stealth API call to bypass adblockers
+      const res = await fetch("/api/data", {
         method: "POST",
         body: JSON.stringify({
           action: "search",
@@ -76,6 +83,7 @@ export default function MobileDashboard() {
 
   return (
     <div className="min-h-screen bg-[#141414] text-white select-none overflow-x-hidden font-sans">
+      {/* 1. CINEMATIC INTRO OVERLAY */}
       <AnimatePresence>
         {showIntro && (
           <motion.div
@@ -103,7 +111,7 @@ export default function MobileDashboard() {
               transition={{ delay: 0.5 }}
               className="mt-8 text-2xl font-black tracking-[0.2em] italic text-rose-100"
             >
-              WELCOME HOME, Deha ❤️
+              WELCOME HOME, SUKU ❤️
             </motion.h1>
             <p className="mt-2 text-zinc-600 text-[10px] uppercase font-bold tracking-widest">
               Everything is ready
@@ -112,6 +120,7 @@ export default function MobileDashboard() {
         )}
       </AnimatePresence>
 
+      {/* 2. TOP HEADER */}
       <header className="px-6 py-5 flex justify-between items-center sticky top-0 bg-[#141414]/80 backdrop-blur-xl z-50 border-b border-white/5">
         <div className="flex items-center gap-2">
           <Sparkles className="text-rose-500 w-4 h-4 animate-pulse" />
@@ -119,6 +128,7 @@ export default function MobileDashboard() {
             SUKU FLIX
           </h1>
         </div>
+
         <div className="flex items-center gap-4">
           <AnimatePresence>
             {view === "search" && (
@@ -149,13 +159,16 @@ export default function MobileDashboard() {
         </div>
       </header>
 
+      {/* 3. MAIN CONTENT AREA */}
       <main className="px-4 pt-4 pb-32 max-w-6xl mx-auto">
+        {/* HOME VIEW */}
         {view === "home" && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="space-y-8"
           >
+            {/* Continue Watching (History Snap Row) */}
             {history.length > 0 && (
               <section>
                 <div className="flex items-center justify-between mb-4 px-1">
@@ -182,7 +195,7 @@ export default function MobileDashboard() {
                           src={item.image}
                           className="w-full h-full object-cover"
                         />
-                        <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                        <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition flex items-center justify-center">
                           <Play
                             fill="white"
                             size={32}
@@ -202,6 +215,7 @@ export default function MobileDashboard() {
               </section>
             )}
 
+            {/* Trending / Recently Added Grid */}
             <section>
               <div className="flex items-center justify-between mb-5 px-1">
                 <h2 className="text-sm font-black uppercase tracking-widest text-zinc-400">
@@ -211,6 +225,7 @@ export default function MobileDashboard() {
                   <div className="w-4 h-4 border-2 border-rose-600 border-t-transparent rounded-full animate-spin"></div>
                 )}
               </div>
+
               <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                 {results.map((item: any, i) => {
                   const isDub = item.title.toLowerCase().includes("dub");
@@ -228,6 +243,7 @@ export default function MobileDashboard() {
                           loading="lazy"
                         />
 
+                        {/* Sub/Dub Badges */}
                         <div className="absolute top-2 left-2 flex flex-col gap-1">
                           {isDub ? (
                             <span className="bg-sky-600/90 backdrop-blur-md text-[8px] font-black px-1.5 py-0.5 rounded shadow-lg flex items-center gap-1">
@@ -255,6 +271,7 @@ export default function MobileDashboard() {
           </motion.div>
         )}
 
+        {/* SEARCH VIEW */}
         {view === "search" && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -297,6 +314,7 @@ export default function MobileDashboard() {
           </motion.div>
         )}
 
+        {/* HISTORY PAGE */}
         {view === "history" && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -327,9 +345,15 @@ export default function MobileDashboard() {
                 <ChevronRight className="text-zinc-700" size={18} />
               </div>
             ))}
+            {history.length === 0 && (
+              <p className="text-center py-20 text-zinc-600 italic">
+                No history yet, let's start a new drama!
+              </p>
+            )}
           </motion.div>
         )}
 
+        {/* SETTINGS VIEW */}
         {view === "settings" && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -348,6 +372,7 @@ export default function MobileDashboard() {
             <p className="text-rose-500 text-[10px] font-black uppercase tracking-[0.3em] mt-1">
               Sweetheart Access
             </p>
+
             <div className="mt-12 space-y-3">
               <button
                 onClick={() => setView("advanced")}
@@ -358,7 +383,11 @@ export default function MobileDashboard() {
               </button>
               <button
                 onClick={() => {
-                  if (confirm("Are you sure?")) {
+                  if (
+                    confirm(
+                      "Are you sure you want to clear your history, love?",
+                    )
+                  ) {
                     localStorage.clear();
                     window.location.reload();
                   }
@@ -371,9 +400,11 @@ export default function MobileDashboard() {
           </motion.div>
         )}
 
+        {/* ADVANCED VIEW */}
         {view === "advanced" && <AdvancedSettings setView={setView} />}
       </main>
 
+      {/* 4. BOTTOM DOCK NAV */}
       <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[92%] max-w-md bg-[#0a0a0a]/90 backdrop-blur-2xl border border-white/10 rounded-[2rem] px-8 py-5 flex justify-between items-center z-[60] shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
         <NavIcon
           icon={<Home size={26} />}
@@ -400,6 +431,7 @@ export default function MobileDashboard() {
   );
 }
 
+// Sub-Components
 function NavIcon({ icon, active, onClick }: any) {
   return (
     <button
@@ -427,13 +459,15 @@ function AdvancedSettings({ setView }: any) {
     bloggerUrl:
       "https://www.blogger.com/feeds/1422331367239821646/posts/default",
   });
+
   useEffect(() => {
     const saved = localStorage.getItem("suku_selectors");
     if (saved) setConfig(JSON.parse(saved));
   }, []);
+
   const save = () => {
     localStorage.setItem("suku_selectors", JSON.stringify(config));
-    alert("Saved!");
+    alert("Scraper Engine Updated! ✨");
     setView("settings");
   };
 
@@ -447,9 +481,13 @@ function AdvancedSettings({ setView }: any) {
         onClick={() => setView("settings")}
         className="text-rose-500 text-xs font-black uppercase tracking-widest mb-6 block"
       >
-        ← Back
+        ← Back to Settings
       </button>
       <h2 className="text-xl font-black mb-2 italic">Engine Configuration</h2>
+      <p className="text-zinc-600 text-[10px] mb-8 uppercase tracking-widest">
+        Update these only if the source site breaks
+      </p>
+
       <div className="space-y-6">
         {Object.keys(config).map((key) => (
           <div key={key} className="space-y-1.5">
@@ -459,15 +497,15 @@ function AdvancedSettings({ setView }: any) {
             <input
               value={(config as any)[key]}
               onChange={(e) => setConfig({ ...config, [key]: e.target.value })}
-              className="w-full bg-zinc-900 border border-white/5 p-4 rounded-2xl text-xs font-mono outline-none focus:border-rose-500"
+              className="w-full bg-zinc-900 border border-white/5 p-4 rounded-2xl text-xs font-mono outline-none focus:border-rose-500 transition-colors"
             />
           </div>
         ))}
         <button
           onClick={save}
-          className="w-full bg-rose-600 py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em]"
+          className="w-full bg-rose-600 py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-rose-900/20 active:scale-95 transition-transform"
         >
-          Save Engine
+          Save Engine Magic
         </button>
       </div>
     </motion.div>

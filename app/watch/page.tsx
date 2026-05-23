@@ -29,13 +29,18 @@ function WatchContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
+  // NEW: Bulletproof Subtitle Blob State
+  const [subBlobUrl, setSubBlobUrl] = useState<string>("");
+
+  // 1. Fetch Episodes
   useEffect(() => {
     const load = async () => {
       try {
         const selectors = JSON.parse(
           localStorage.getItem("suku_selectors") || "null",
         );
-        const res = await fetch("/api/discover", {
+        const res = await fetch("/api/data", {
+          // Updated API Name
           method: "POST",
           body: JSON.stringify({
             action: "episodes",
@@ -55,15 +60,47 @@ function WatchContent() {
     load();
   }, [rawTitle]);
 
+  // 2. The Ultimate Subtitle Blob Fetcher (Bypasses all CORS/Content-Type browser errors)
+  useEffect(() => {
+    let objectUrl = "";
+    const fetchSubtitle = async () => {
+      if (activeEp?.sub) {
+        try {
+          const res = await fetch(
+            `/api/media?url=${encodeURIComponent(activeEp.sub)}&isSub=true`,
+          );
+          let text = await res.text();
+
+          // Guarantee VTT Format
+          if (!text.trim().startsWith("WEBVTT")) {
+            text =
+              "WEBVTT\n\n" +
+              text.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2");
+          }
+
+          // Create local file in memory
+          const blob = new Blob([text], { type: "text/vtt; charset=utf-8" });
+          objectUrl = URL.createObjectURL(blob);
+          setSubBlobUrl(objectUrl);
+        } catch (e) {
+          console.error("Failed to load subs", e);
+        }
+      } else {
+        setSubBlobUrl("");
+      }
+    };
+    fetchSubtitle();
+
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl); // Clean up memory
+    };
+  }, [activeEp]);
+
+  // 3. Video URL and Player Initialization
   const isM3U8 = activeEp?.url?.includes(".m3u8");
   const videoUrl = isM3U8
-    ? `/api/stream?url=${encodeURIComponent(activeEp?.url || "")}`
+    ? `/api/media?url=${encodeURIComponent(activeEp?.url || "")}`
     : activeEp?.url;
-
-  // 1. NO STRICT CHECKS - If a sub exists, proxy it!
-  const subProxyUrl = activeEp?.sub
-    ? `/api/stream?url=${encodeURIComponent(activeEp.sub)}&isSub=true`
-    : "";
 
   useEffect(() => {
     if (!videoUrl || error) return;
@@ -75,9 +112,7 @@ function WatchContent() {
       if (isM3U8) video.crossOrigin = "anonymous";
 
       const handleVideoError = () => {
-        if (video.error && video.error.code !== 3) {
-          setError(true);
-        }
+        if (video.error && video.error.code !== 3) setError(true);
       };
       video.addEventListener("error", handleVideoError);
 
@@ -203,14 +238,14 @@ function WatchContent() {
               source={{
                 type: "video",
                 sources: isM3U8 ? [] : [{ src: videoUrl, type: "video/mp4" }],
-                // 2. Pass SubProxyUrl directly
-                tracks: subProxyUrl
+                // INJECT LOCAL BLOB URL (Bypasses all browser security checks for subtitles)
+                tracks: subBlobUrl
                   ? [
                       {
                         kind: "captions",
                         label: "English",
                         srcLang: "en",
-                        src: subProxyUrl,
+                        src: subBlobUrl,
                         default: true,
                       },
                     ]
@@ -232,7 +267,6 @@ function WatchContent() {
             </h3>
             <div className="h-px flex-1 bg-zinc-800"></div>
           </div>
-
           <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
             {episodes.map((ep: any, i) => (
               <button
