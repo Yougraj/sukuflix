@@ -55,21 +55,30 @@ function WatchContent() {
     load();
   }, [rawTitle]);
 
+  const isM3U8 = activeEp?.url?.includes(".m3u8");
+  const proxyUrl = activeEp?.url
+    ? `/api/stream?url=${encodeURIComponent(activeEp.url)}`
+    : "";
+  const subProxyUrl = activeEp?.sub
+    ? `/api/stream?url=${encodeURIComponent(activeEp.sub)}&isSub=true`
+    : "";
+
   useEffect(() => {
-    if (!activeEp?.url) return;
-    setError(false);
+    if (!activeEp?.url || error) return;
 
     const timer = setTimeout(() => {
       const video = document.querySelector("video");
       if (!video) return;
 
       video.crossOrigin = "anonymous";
-      const proxyUrl = `/api/stream?url=${encodeURIComponent(activeEp.url)}`;
 
-      // Catch Standard MP4 Native Errors
+      // Native Video Error Catcher
       const handleVideoError = () => {
-        console.error("Native Video Error Triggered");
-        setError(true);
+        if (video.error && video.error.code !== 3) {
+          // 3 is Decode error, often a false positive
+          console.error("Native Video Error", video.error);
+          setError(true);
+        }
       };
       video.addEventListener("error", handleVideoError);
 
@@ -101,9 +110,8 @@ function WatchContent() {
       video.addEventListener("play", handlePlay);
       document.addEventListener("fullscreenchange", handleFullscreenExit);
 
-      // --- HLS LOGIC WITH STRICT ERROR CATCHING ---
       let hls: Hls;
-      if (activeEp.url.includes(".m3u8")) {
+      if (isM3U8) {
         if (Hls.isSupported()) {
           hls = new Hls({ debug: false, enableWorker: true });
           hls.loadSource(proxyUrl);
@@ -111,16 +119,14 @@ function WatchContent() {
 
           hls.on(Hls.Events.ERROR, (event, data) => {
             if (data.fatal) {
-              console.error("HLS Fatal Error:", data.type);
+              console.error("HLS Error", data.type);
               hls.destroy();
-              setError(true); // Triggers the Magic Link UI
+              setError(true);
             }
           });
         } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
           video.src = proxyUrl;
         }
-      } else {
-        video.src = proxyUrl;
       }
 
       return () => {
@@ -132,7 +138,7 @@ function WatchContent() {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [activeEp]);
+  }, [activeEp, error, isM3U8, proxyUrl]);
 
   if (loading)
     return (
@@ -143,10 +149,6 @@ function WatchContent() {
         </p>
       </div>
     );
-
-  const subProxyUrl = activeEp?.sub
-    ? `/api/stream?url=${encodeURIComponent(activeEp.sub)}&isSub=true`
-    : "";
 
   return (
     <div className="min-h-screen bg-[#050505] text-white pb-20">
@@ -176,7 +178,8 @@ function WatchContent() {
 
       <div className="max-w-4xl mx-auto px-2 mt-2">
         <div className="rounded-xl overflow-hidden shadow-2xl bg-black aspect-video border border-white/5 relative">
-          {error && (
+          {/* Unmount Plyr completely if there is an error to prevent React DOM collisions */}
+          {error ? (
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/90 p-6 text-center gap-4">
               <AlertCircle className="text-rose-600 animate-bounce" size={40} />
               <p className="text-sm font-bold text-rose-100">
@@ -195,30 +198,31 @@ function WatchContent() {
                 <ExternalLink size={16} /> OPEN NATIVE PLAYER
               </a>
             </div>
+          ) : (
+            <Plyr
+              key={activeEp?.label}
+              source={{
+                type: "video",
+                // If it's an MP4, feed it natively to Plyr. If it's M3U8, let HLS.js handle it (empty sources).
+                sources: isM3U8 ? [] : [{ src: proxyUrl, type: "video/mp4" }],
+                tracks: subProxyUrl
+                  ? [
+                      {
+                        kind: "captions",
+                        label: "English",
+                        srcLang: "en",
+                        src: subProxyUrl,
+                        default: true,
+                      },
+                    ]
+                  : [],
+              }}
+              options={{
+                captions: { active: true, update: true, language: "en" },
+                fullscreen: { enabled: true, fallback: true, iosNative: true },
+              }}
+            />
           )}
-
-          <Plyr
-            key={activeEp?.label}
-            source={{
-              type: "video",
-              sources: [], // HLS injects the stream automatically
-              tracks: subProxyUrl
-                ? [
-                    {
-                      kind: "captions",
-                      label: "English",
-                      srcLang: "en",
-                      src: subProxyUrl,
-                      default: true,
-                    },
-                  ]
-                : [],
-            }}
-            options={{
-              captions: { active: true, update: true, language: "en" },
-              fullscreen: { enabled: true, fallback: true, iosNative: true },
-            }}
-          />
         </div>
 
         <div className="mt-8 px-2">

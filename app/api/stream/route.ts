@@ -17,14 +17,23 @@ export async function GET(req: Request) {
       },
     });
 
-    // 1. IF CLOUDFLARE BLOCKS US, STOP AND RETURN ERROR TO FRONTEND
+    // --- GRACEFUL ERROR HANDLING ---
     if (!res.ok) {
-      return new Response("Blocked by Upstream Server", { status: res.status });
+      if (isSub) {
+        // If subtitles are blocked, return an empty subtitle file so the video doesn't crash
+        return new Response("WEBVTT\n\n", {
+          headers: {
+            "Content-Type": "text/vtt",
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
+      }
+      return new Response("Video Server Blocked", { status: res.status });
     }
 
     let contentType = res.headers.get("content-type") || "";
 
-    // 2. STRICT SUBTITLE CHECK
+    // --- SUBTITLES ---
     if (
       isSub ||
       contentType.includes("vtt") ||
@@ -36,11 +45,12 @@ export async function GET(req: Request) {
         headers: {
           "Content-Type": "text/vtt; charset=utf-8",
           "Access-Control-Allow-Origin": "*",
+          "Cache-Control": "public, max-age=86400",
         },
       });
     }
 
-    // 3. M3U8 PLAYLIST PROCESSING
+    // --- M3U8 PLAYLIST REWRITING ---
     if (contentType.includes("mpegurl") || targetUrl.includes(".m3u8")) {
       const text = await res.text();
       const baseApiUrl = `${reqUrl.origin}/api/stream?url=`;
@@ -74,7 +84,7 @@ export async function GET(req: Request) {
       });
     }
 
-    // 4. STANDARD MP4 / TS CHUNKS
+    // --- MP4 / STANDARD VIDEO ---
     return new Response(res.body, {
       headers: {
         "Content-Type": contentType || "video/mp4",
