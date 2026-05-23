@@ -1,6 +1,5 @@
 export const runtime = "edge";
 
-// 1. THIS FIXES NETLIFY CORS FOR SUBTITLES
 export async function OPTIONS() {
   return new Response(null, {
     status: 204,
@@ -19,7 +18,7 @@ export async function GET(req: Request) {
 
   if (!targetUrl) return new Response("No URL provided", { status: 400 });
 
-  // Smart Redirect for MP4s (Prevents Netlify Timeouts)
+  // 1. SMART REDIRECT FOR MP4s (Prevents Netlify Timeouts & VTT mixups)
   if (targetUrl.includes(".mp4") && !isSub) {
     return Response.redirect(targetUrl, 302);
   }
@@ -28,49 +27,42 @@ export async function GET(req: Request) {
     const res = await fetch(targetUrl, {
       headers: {
         Referer: "https://kisskh.buzz/",
-        Origin: "https://kisskh.buzz",
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       },
     });
 
-    if (!res.ok) {
-      if (isSub)
+    // 2. SUBTITLE FORMATTER
+    if (isSub || targetUrl.endsWith(".vtt") || targetUrl.endsWith(".srt")) {
+      if (!res.ok)
         return new Response("WEBVTT\n\n", {
           headers: {
             "Content-Type": "text/vtt",
             "Access-Control-Allow-Origin": "*",
           },
         });
+
+      let text = await res.text();
+      if (!text.trim().startsWith("WEBVTT")) {
+        text =
+          "WEBVTT\n\n" + text.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2");
+      }
+      return new Response(text, {
+        headers: {
+          "Content-Type": "text/vtt; charset=utf-8",
+          "Access-Control-Allow-Origin": "*",
+        },
+      });
+    }
+
+    // 3. ERROR CATCHER FOR VIDEOS
+    if (!res.ok) {
       return new Response("Server Blocked", { status: res.status });
     }
 
     let contentType = res.headers.get("content-type") || "";
 
-    // 2. SUBTITLE CONVERTER (Forces all subtitles into WEBVTT format)
-    if (
-      isSub ||
-      contentType.includes("vtt") ||
-      targetUrl.includes(".vtt") ||
-      targetUrl.includes(".srt")
-    ) {
-      let text = await res.text();
-
-      if (!text.trim().startsWith("WEBVTT")) {
-        text =
-          "WEBVTT\n\n" + text.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2");
-      }
-
-      return new Response(text, {
-        headers: {
-          "Content-Type": "text/vtt; charset=utf-8",
-          "Access-Control-Allow-Origin": "*",
-          "Cache-Control": "public, max-age=86400",
-        },
-      });
-    }
-
-    // 3. M3U8 PLAYLIST REWRITER
+    // 4. M3U8 PLAYLIST REWRITER
     if (contentType.includes("mpegurl") || targetUrl.includes(".m3u8")) {
       const text = await res.text();
       const baseApiUrl = `${reqUrl.origin}/api/stream?url=`;
@@ -104,7 +96,7 @@ export async function GET(req: Request) {
       });
     }
 
-    // 4. STANDARD CHUNKS (.TS)
+    // 5. STANDARD CHUNKS (.TS)
     return new Response(res.body, {
       headers: {
         "Content-Type": contentType || "video/mp2t",

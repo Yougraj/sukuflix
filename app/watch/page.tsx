@@ -28,19 +28,17 @@ function WatchContent() {
   const [activeEp, setActiveEp] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-
-  // NEW: Bulletproof Subtitle Blob State
   const [subBlobUrl, setSubBlobUrl] = useState<string>("");
 
-  // 1. Fetch Episodes
+  // 1. Load Episodes
   useEffect(() => {
     const load = async () => {
       try {
         const selectors = JSON.parse(
           localStorage.getItem("suku_selectors") || "null",
         );
-        const res = await fetch("/api/data", {
-          // Updated API Name
+        // Make sure this points to your new api/data (or api/discover if you didn't rename it)
+        const res = await fetch("/api/discover", {
           method: "POST",
           body: JSON.stringify({
             action: "episodes",
@@ -60,46 +58,36 @@ function WatchContent() {
     load();
   }, [rawTitle]);
 
-  // 2. The Ultimate Subtitle Blob Fetcher (Bypasses all CORS/Content-Type browser errors)
+  // 2. Fetch Subtitles Invisibly (The Blob Trick)
   useEffect(() => {
     let objectUrl = "";
-    const fetchSubtitle = async () => {
+    const fetchSub = async () => {
       if (activeEp?.sub) {
         try {
           const res = await fetch(
-            `/api/media?url=${encodeURIComponent(activeEp.sub)}&isSub=true`,
+            `/api/stream?url=${encodeURIComponent(activeEp.sub)}&isSub=true`,
           );
-          let text = await res.text();
-
-          // Guarantee VTT Format
-          if (!text.trim().startsWith("WEBVTT")) {
-            text =
-              "WEBVTT\n\n" +
-              text.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2");
-          }
-
-          // Create local file in memory
+          const text = await res.text();
           const blob = new Blob([text], { type: "text/vtt; charset=utf-8" });
           objectUrl = URL.createObjectURL(blob);
           setSubBlobUrl(objectUrl);
         } catch (e) {
-          console.error("Failed to load subs", e);
+          setSubBlobUrl("");
         }
       } else {
         setSubBlobUrl("");
       }
     };
-    fetchSubtitle();
-
+    fetchSub();
     return () => {
-      if (objectUrl) URL.revokeObjectURL(objectUrl); // Clean up memory
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [activeEp]);
 
-  // 3. Video URL and Player Initialization
+  // 3. Setup Video Routing
   const isM3U8 = activeEp?.url?.includes(".m3u8");
   const videoUrl = isM3U8
-    ? `/api/media?url=${encodeURIComponent(activeEp?.url || "")}`
+    ? `/api/stream?url=${encodeURIComponent(activeEp?.url || "")}`
     : activeEp?.url;
 
   useEffect(() => {
@@ -112,7 +100,9 @@ function WatchContent() {
       if (isM3U8) video.crossOrigin = "anonymous";
 
       const handleVideoError = () => {
-        if (video.error && video.error.code !== 3) setError(true);
+        if (video.error && video.error.code !== 3) {
+          setError(true);
+        }
       };
       video.addEventListener("error", handleVideoError);
 
@@ -210,15 +200,16 @@ function WatchContent() {
       </div>
 
       <div className="max-w-4xl mx-auto px-2 mt-2">
+        {/* CRITICAL FIX: The `key` prevents React and Plyr from crashing the DOM */}
         <div
-          key={`player-${activeEp?.label || "empty"}-${error}`}
+          key={`player-container-${activeEp?.label}-${error}`}
           className="rounded-xl overflow-hidden shadow-2xl bg-black aspect-video border border-white/5 relative"
         >
           {error ? (
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/90 p-6 text-center gap-4">
               <AlertCircle className="text-rose-600 animate-bounce" size={40} />
               <p className="text-sm font-bold text-rose-100">
-                High Security Video Server
+                Video Server Locked
               </p>
               <p className="text-[10px] text-zinc-400 max-w-xs">
                 We cannot embed this video. Open the Native Player below to
@@ -237,8 +228,9 @@ function WatchContent() {
             <Plyr
               source={{
                 type: "video",
+                // MP4s get passed directly to Plyr. M3U8s are left empty for HLS.
                 sources: isM3U8 ? [] : [{ src: videoUrl, type: "video/mp4" }],
-                // INJECT LOCAL BLOB URL (Bypasses all browser security checks for subtitles)
+                // Local Blob URL guarantees Subtitles load without CORS issues
                 tracks: subBlobUrl
                   ? [
                       {
@@ -267,6 +259,7 @@ function WatchContent() {
             </h3>
             <div className="h-px flex-1 bg-zinc-800"></div>
           </div>
+
           <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
             {episodes.map((ep: any, i) => (
               <button
